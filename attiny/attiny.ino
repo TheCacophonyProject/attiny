@@ -56,6 +56,9 @@ void loop() {
       break;
     case PI_SLEEPING:
       digitalWrite(PI_POWER_PIN, LOW);
+      if (piSleepTime == 0) {
+        state = PI_POWERED;
+      }
       break;
     case PI_WDT_FAILED:
       digitalWrite(PI_POWER_PIN, LOW);
@@ -139,10 +142,6 @@ void receiveEvent(uint8_t howMany) {
     case 0x12:
       blink(1);
       piWDTCountdown = PI_WDT_RESET_VAL;
-      break;
-    case 0x13:
-      //TinyWireS.send(0x01);
-      //blink(6);
       break;
     default:
       blink(3);
