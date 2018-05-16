@@ -22,7 +22,7 @@ unsigned int piWDTCountdown = PI_WDT_RESET_VAL;
 volatile byte message[12];
 volatile boolean newMessage = false;
 
-int blinks = 0;
+volatile int blinks = 0;
 enum State {
   PI_POWERED,
   PI_POWER_OFF_WAIT,        // Wait 30 seconds before powering off the Pi
@@ -82,9 +82,6 @@ void loop() {
   update_power_led();
   timer_tick();
   pi_wdt_tick();
-  if (newMessage) {
-    readi2cMessage();
-  }
 }
 
 void pi_wdt_tick() {
@@ -127,27 +124,28 @@ void requestEvent() {
 }
 
 void receiveEvent(uint8_t howMany) {
-  if (howMany < 1 || howMany > sizeof(message)) {
-    // Message too short or too long.
+  if (howMany < 1) {
+    // Message too short.
+    blinks = 2;
     return;
   }
-  memset(message, 0x00, sizeof(message));
+  if (howMany > 10) { // Message too long. Read bytes then exit.
+    while(TinyWireS.available()) {
+      TinyWireS.receive();
+    }
+    blinks = 3;
+    return;
+  }
+  byte message[10];
   int i = 0;
-  while(howMany--) {
+  while(TinyWireS.available()) {
     message[i++] = TinyWireS.receive();
   }
-  newMessage = true;
-}
-
-void readi2cMessage() {
-  newMessage = false;
   switch(message[0]) {
     case 0x11:
       blinks = 5;
       minuteCountdown = MINUTE_COUNTDOWN;
-      cli();
       piSleepTime = (message[1] << 8) + message[2];
-      sei();
       state = PI_POWER_OFF_WAIT;
       break;
     case 0x12:
@@ -158,7 +156,6 @@ void readi2cMessage() {
       blinks = 10;
       break;
   }
-  memset(message, 0x00, sizeof(message));
 }
 
 // Usefull when debugging
