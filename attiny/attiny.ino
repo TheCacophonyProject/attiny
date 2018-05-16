@@ -15,8 +15,6 @@
 #define MINUTE_COUNTDOWN 108 // = (60/0.5)*90% as each interupt occurs every 0.5 seconds. -10% because of inaccurate internal clock
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
 
-
-int piPowerOffWait = PI_POWER_OFF_WAIT_TIME;
 volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will be turned on in minutes. If this is 0 the pi will be powered on.
 volatile int minuteCountdown = MINUTE_COUNTDOWN;
 unsigned int piWDTCountdown = PI_WDT_RESET_VAL;
@@ -147,7 +145,9 @@ void readi2cMessage() {
     case 0x11:
       blinks = 5;
       minuteCountdown = MINUTE_COUNTDOWN;
+      cli();
       piSleepTime = (message[1] << 8) + message[2];
+      sei();
       state = PI_POWER_OFF_WAIT;
       break;
     case 0x12:
@@ -176,29 +176,29 @@ void testBlink(int x) {
 
 //========POWER PIN=========
 // Slowly turns the LED on and off
-int powerPinState = 1;  // Pulsing on or off
-int powerPinIntensity = 0;
+int powerLedState = 1;  // Pulsing on or off
+int powerLedIntensity = 0;
 int blinkTimer = 0;
 
 void update_power_led() {
   blinkTimer++;
-  switch(powerPinState){
+  switch(powerLedState){
     case 0: // Pulsing on 
-      powerPinIntensity++;
-      analogWrite(POWER_LED, powerPinIntensity);
-      if (powerPinIntensity >= 150) {
-        powerPinState = 1;
+      powerLedIntensity++;
+      analogWrite(POWER_LED, powerLedIntensity);
+      if (powerLedIntensity >= 150) {
+        powerLedState = 1;
       }
       break;
     case 1: // Pulsing off
-      powerPinIntensity--;
-      analogWrite(POWER_LED, powerPinIntensity);
-      if (powerPinIntensity <= 1) {
+      powerLedIntensity--;
+      analogWrite(POWER_LED, powerLedIntensity);
+      if (powerLedIntensity <= 1) {
         if (blinks >= 1) {
-          powerPinState = 2; // Starting the blink here makes it easier to count the blinks
+          powerLedState = 2; // Starting the blink here makes it easier to count the blinks
           blinkTimer = 0;
         } else {
-          powerPinState = 0;
+          powerLedState = 0;
         }
       }
       break;
@@ -206,14 +206,14 @@ void update_power_led() {
       digitalWrite(POWER_LED, LOW);
       if (blinkTimer >= 50) {
         blinkTimer = 0;
-        powerPinState = 3;
+        powerLedState = 3;
       }
       break;
     case 3: // Blink on
       digitalWrite(POWER_LED, HIGH);
       if (blinkTimer >= 30) {
         blinkTimer = 0;
-        powerPinState = 4;
+        powerLedState = 4;
       }
       break;
     case 4: // Blink off
@@ -222,19 +222,19 @@ void update_power_led() {
         blinkTimer = 0;
         blinks--;
         if (blinks <= 0) {
-          powerPinState = 5;
+          powerLedState = 5;
         } else {
-          powerPinState = 3;
+          powerLedState = 3;
         }
       }
       break;
     case 5:
       if (blinkTimer >= 100) {
-        powerPinState = 0;
+        powerLedState = 0;
       }
       break;
     default:
-      powerPinState = 0;
+      powerLedState = 0;
       break;
   }
 }
