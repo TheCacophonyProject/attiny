@@ -15,12 +15,11 @@
 #define MINUTE_COUNTDOWN 108 // = (60/0.5)*90% as each interupt occurs every 0.5 seconds. -10% because of inaccurate internal clock
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
 
-
-int piPowerOffWait = PI_POWER_OFF_WAIT_TIME;
-uint16_t piSleepTime = 0; // Counting down the time until the pi will be turned on in minutes. If this is 0 the pi will be powered on.
-volatile int minuteCountdown = MINUTE_COUNTDOWN;
+volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will be turned on in minutes. If this is 0 the pi will be powered on.
+volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
 unsigned int piWDTCountdown = PI_WDT_RESET_VAL;
 
+volatile uint8_t blinks = 0;
 enum State {
   PI_POWERED,
   PI_POWER_OFF_WAIT,        // Wait 30 seconds before powering off the Pi
@@ -39,7 +38,7 @@ void setup() {
   TinyWireS.begin(I2C_SLAVE_ADDRESS);
   TinyWireS.onReceive(receiveEvent);
   TinyWireS.onRequest(requestEvent);
-  blink(2);
+  blinks = 2;
   wdt_enable(WDTO_8S); // enable 8 second WDT
 }
 
@@ -56,9 +55,11 @@ void loop() {
       break;
     case PI_SLEEPING:
       digitalWrite(PI_POWER_PIN, LOW);
+      cli();
       if (piSleepTime == 0) {
         state = PI_POWERED;
       }
+      sei();
       break;
     case PI_WDT_FAILED:
       digitalWrite(PI_POWER_PIN, LOW);
@@ -66,7 +67,7 @@ void loop() {
       if (timer_finished()) {
         piWDTCountdown = PI_WDT_RESET_VAL;
         state = PI_POWERED;
-        blink(3);
+        blinks = 3;
       }
       break;
   }
@@ -92,7 +93,6 @@ void pi_wdt_tick() {
     state = PI_WDT_FAILED;
   }
 }
-
 
 int t = -1;  // -1 = no timer running, 0 = timer finished. After timer finished is checked it gets set to -1 again.
 
@@ -123,36 +123,42 @@ void requestEvent() {
 }
 
 void receiveEvent(uint8_t howMany) {
-  howMany--;
-  byte h;
-  byte l;
-  switch(TinyWireS.receive()) {
+  if (howMany < 1) {
+    // Message too short.
+    blinks = 2;
+    return;
+  }
+  if (howMany > 10) { // Message too long. Read bytes then exit.
+    while(TinyWireS.available()) {
+      TinyWireS.receive();
+    }
+    blinks = 3;
+    return;
+  }
+  byte message[10];
+  int i = 0;
+  while(TinyWireS.available()) {
+    message[i++] = TinyWireS.receive();
+  }
+  switch(message[0]) {
     case 0x11:
+      blinks = 5;
       minuteCountdown = MINUTE_COUNTDOWN;
-      h = TinyWireS.receive();
-      howMany--;
-      l = TinyWireS.receive();
-      howMany--;
-      cli();
-      piSleepTime = (h << 8) + l;
-      sei();
+      piSleepTime = (message[1] << 8) + message[2];
       state = PI_POWER_OFF_WAIT;
-      blink(5);
       break;
     case 0x12:
-      blink(1);
+      blinks = 1;
       piWDTCountdown = PI_WDT_RESET_VAL;
       break;
     default:
-      blink(3);
+      blinks = 10;
       break;
-  }
-  while (howMany >= 1) {
-    TinyWireS.receive();
   }
 }
 
-void blink(int x) {
+// Usefull when debugging
+void testBlink(int x) {
   while(x--) {
     wdt_reset();
     digitalWrite(POWER_LED, LOW);
@@ -166,25 +172,67 @@ void blink(int x) {
 
 //========POWER PIN=========
 // Slowly turns the LED on and off
-int powerPinState = 0;
-int powerPinIntensity = 0;
+int powerLedState = 1;  // Pulsing on or off
+int powerLedIntensity = 0;
+int blinkTimer = 0;
 
 void update_power_led() {
-  switch(powerPinState){
-    case 0:
-      powerPinIntensity++;
-      if (powerPinIntensity >= 254) {
-        powerPinState = 1;
+  blinkTimer++;
+  switch(powerLedState){
+    case 0: // Pulsing on 
+      powerLedIntensity++;
+      analogWrite(POWER_LED, powerLedIntensity);
+      if (powerLedIntensity >= 150) {
+        powerLedState = 1;
       }
       break;
-    case 1:
-     powerPinIntensity--;
-      if (powerPinIntensity <= 5) {
-        powerPinState = 0;
+    case 1: // Pulsing off
+      powerLedIntensity--;
+      analogWrite(POWER_LED, powerLedIntensity);
+      if (powerLedIntensity <= 1) {
+        if (blinks >= 1) {
+          powerLedState = 2; // Starting the blink here makes it easier to count the blinks
+          blinkTimer = 0;
+        } else {
+          powerLedState = 0;
+        }
       }
+      break;
+    case 2: // New blink wait.
+      digitalWrite(POWER_LED, LOW);
+      if (blinkTimer >= 50) {
+        blinkTimer = 0;
+        powerLedState = 3;
+      }
+      break;
+    case 3: // Blink on
+      digitalWrite(POWER_LED, HIGH);
+      if (blinkTimer >= 30) {
+        blinkTimer = 0;
+        powerLedState = 4;
+      }
+      break;
+    case 4: // Blink off
+      digitalWrite(POWER_LED, LOW);
+      if (blinkTimer >= 40) {
+        blinkTimer = 0;
+        blinks--;
+        if (blinks <= 0) {
+          powerLedState = 5;
+        } else {
+          powerLedState = 3;
+        }
+      }
+      break;
+    case 5:
+      if (blinkTimer >= 100) {
+        powerLedState = 0;
+      }
+      break;
+    default:
+      powerLedState = 0;
       break;
   }
-  analogWrite(POWER_LED, powerPinIntensity);
 }
 
 //=======TIMER=======
@@ -199,7 +247,7 @@ void initTimer1() {
 
 ISR(TIMER1_COMPA_vect) {
   if(minuteCountdown <= 0) {
-    minuteCountdown = 120; // =60/0.5 because interrupt every 0.5 seconds
+    minuteCountdown = MINUTE_COUNTDOWN;
     if (piSleepTime > 0) {
       piSleepTime--;
     }
