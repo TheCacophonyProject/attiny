@@ -16,13 +16,10 @@
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
 
 volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will be turned on in minutes. If this is 0 the pi will be powered on.
-volatile int minuteCountdown = MINUTE_COUNTDOWN;
+volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
 unsigned int piWDTCountdown = PI_WDT_RESET_VAL;
 
-volatile byte message[12];
-volatile boolean newMessage = false;
-
-volatile int blinks = 0;
+volatile uint8_t blinks = 0;
 enum State {
   PI_POWERED,
   PI_POWER_OFF_WAIT,        // Wait 30 seconds before powering off the Pi
@@ -58,9 +55,11 @@ void loop() {
       break;
     case PI_SLEEPING:
       digitalWrite(PI_POWER_PIN, LOW);
+      cli();
       if (piSleepTime == 0) {
         state = PI_POWERED;
       }
+      sei();
       break;
     case PI_WDT_FAILED:
       digitalWrite(PI_POWER_PIN, LOW);
@@ -248,10 +247,12 @@ void initTimer1() {
 
 ISR(TIMER1_COMPA_vect) {
   if(minuteCountdown <= 0) {
-    minuteCountdown = 120; // =60/0.5 because interrupt every 0.5 seconds
+    minuteCountdown = MINUTE_COUNTDOWN;
+    cli();
     if (piSleepTime > 0) {
       piSleepTime--;
     }
+    sei();
   } else {
     minuteCountdown--;
   }
