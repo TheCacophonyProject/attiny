@@ -248,11 +248,9 @@ void initTimer1() {
 ISR(TIMER1_COMPA_vect) {
   if(minuteCountdown <= 0) {
     minuteCountdown = MINUTE_COUNTDOWN;
-    cli();
     if (piSleepTime > 0) {
       piSleepTime--;
     }
-    sei();
   } else {
     minuteCountdown--;
   }
