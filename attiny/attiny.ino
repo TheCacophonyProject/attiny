@@ -1,7 +1,15 @@
+
 // Code to run on a attiny85 connected to a raspberry pi through i2c.
 // The two main functions of this is to power off the raspberry pi during the day. This is done by the raspberry pi telling the attiny through i2c how long to be turned off for.
 // The attiny then turns the pi off using a mosfet. And will power it back on when needed.
 // The second function is to work as a WDT for the raspberry Pi when is is runnign through the nihgt. So if the pi doesn't reset the WDT the attiny will power off and on the pi.
+
+// There is a power LED that will pulse when the code is running. This LED can also blink to help debugging. Below are a list of what the different number of blinks mean.
+// 1 Blink: Reset Pi WDT.
+// 2 Blinks: Finished setup.
+// 3 Blinks: Pi WDT failed.
+// 4 Blinks: Starting Pi sleep.
+// 10 Blinks: Error with reading i2c message.
 
 #include <TinyWireS.h>
 #include <avr/interrupt.h>
@@ -38,7 +46,7 @@ void setup() {
   TinyWireS.begin(I2C_SLAVE_ADDRESS);
   TinyWireS.onReceive(receiveEvent);
   TinyWireS.onRequest(requestEvent);
-  blinks = 2;
+  setBlinks(2);
   wdt_enable(WDTO_8S); // enable 8 second WDT
 }
 
@@ -67,7 +75,7 @@ void loop() {
       if (timer_finished()) {
         piWDTCountdown = PI_WDT_RESET_VAL;
         state = PI_POWERED;
-        blinks = 3;
+        setBlinks(3);
       }
       break;
   }
@@ -125,35 +133,40 @@ void requestEvent() {
 void receiveEvent(uint8_t howMany) {
   if (howMany < 1) {
     // Message too short.
-    blinks = 2;
+    setBlinks(10);
     return;
   }
-  if (howMany > 10) { // Message too long. Read bytes then exit.
-    while(TinyWireS.available()) {
-      TinyWireS.receive();
-    }
-    blinks = 3;
-    return;
-  }
-  byte message[10];
-  int i = 0;
-  while(TinyWireS.available()) {
-    message[i++] = TinyWireS.receive();
-  }
-  switch(message[0]) {
+  bool successfullMessageRead = false;
+  byte l;
+  byte h;
+  switch (TinyWireS.receive()) {
     case 0x11:
-      blinks = 5;
+      if (howMany != 3) {
+          break;
+      }
+      h = TinyWireS.receive();
+      l = TinyWireS.receive();
+      piSleepTime = (h << 8) + l;
       minuteCountdown = MINUTE_COUNTDOWN;
-      piSleepTime = (message[1] << 8) + message[2];
+      setBlinks(4);
       state = PI_POWER_OFF_WAIT;
+      successfullMessageRead = true;
       break;
     case 0x12:
-      blinks = 1;
+      if (howMany != 1) {
+        break;
+      }
+      setBlinks(1);
       piWDTCountdown = PI_WDT_RESET_VAL;
+      successfullMessageRead = true;
       break;
-    default:
-      blinks = 10;
-      break;
+  }
+
+  while(TinyWireS.available()) {
+    TinyWireS.receive();
+  }
+  if (!successfullMessageRead) {
+    setBlinks(10);
   }
 }
 
@@ -167,6 +180,12 @@ void testBlink(int x) {
     tws_delay(200);
     digitalWrite(POWER_LED, LOW);
     tws_delay(200);
+  }
+}
+
+void setBlinks(int i) {
+  if (blinks <= 0) {
+    blinks = i;
   }
 }
 
