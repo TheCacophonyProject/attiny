@@ -136,7 +136,7 @@ void receiveEvent(uint8_t howMany) {
     setBlinks(10);
     return;
   }
-  bool successfullMessageRead = false;
+  bool successfulRead = false;
   byte l;
   byte h;
   switch (TinyWireS.receive()) {
@@ -150,7 +150,7 @@ void receiveEvent(uint8_t howMany) {
       minuteCountdown = MINUTE_COUNTDOWN;
       setBlinks(4);
       state = PI_POWER_OFF_WAIT;
-      successfullMessageRead = true;
+      successfulRead = true;
       break;
     case 0x12:
       if (howMany != 1) {
@@ -158,14 +158,14 @@ void receiveEvent(uint8_t howMany) {
       }
       setBlinks(1);
       piWDTCountdown = PI_WDT_RESET_VAL;
-      successfullMessageRead = true;
+      successfulRead = true;
       break;
   }
 
   while(TinyWireS.available()) {
     TinyWireS.receive();
   }
-  if (!successfullMessageRead) {
+  if (!successfulRead) {
     setBlinks(10);
   }
 }
