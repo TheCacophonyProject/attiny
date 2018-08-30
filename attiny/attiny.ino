@@ -19,7 +19,7 @@
 #define I2C_SLAVE_ADDRESS 0x04 // Address of the slave
 #define POWER_LED 1
 #define PI_POWER_PIN 3
-#define PI_POWER_OFF_WAIT_TIME 1000 // 10 seconds. = 10/0.01 as each tick is 0.01 seconds.
+#define PI_POWER_OFF_WAIT_TIME 3000 // 30 seconds. = 30/0.01 as each tick is 0.01 seconds.
 #define MINUTE_COUNTDOWN 108 // = (60/0.5)*90% as each interupt occurs every 0.5 seconds. -10% because of inaccurate internal clock
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
 
@@ -56,7 +56,7 @@ void loop() {
       digitalWrite(PI_POWER_PIN, HIGH);
       break;
     case PI_POWER_OFF_WAIT:
-      set_timer_if_not_running(1000); // wait 10 seconds.
+      set_timer_if_not_running(PI_POWER_OFF_WAIT_TIME);
       if (timer_finished()) {
         state = PI_SLEEPING;
       }
