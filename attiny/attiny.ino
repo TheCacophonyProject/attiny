@@ -16,6 +16,7 @@
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <avr/wdt.h>
+#include <avr/sleep.h>
 
 #define I2C_SLAVE_ADDRESS 0x04 // Address of the slave
 #define POWER_LED 1
@@ -28,6 +29,8 @@
 volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will be turned on in minutes. If this is 0 the pi will be powered on.
 volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
 unsigned int piWDTCountdown = PI_WDT_RESET_VAL;
+volatile bool wdt_interrupt_f = false;
+
 
 volatile uint8_t blinks = 0;
 enum State {
@@ -49,8 +52,12 @@ volatile byte i2cReadRegs[I2C_READ_REG_LEN] =
 State state = PI_POWERED;
 
 void setup() {
+  pinMode(BATTERY_VOLTAGE_PIN, INPUT);
   pinMode(PI_POWER_PIN, OUTPUT);
   pinMode(POWER_LED, OUTPUT);
+  digitalWrite(PI_POWER_PIN, LOW);
+  digitalWrite(POWER_LED, LOW);
+  checkBattery();
   digitalWrite(POWER_LED, LOW);
   initTimer1();
   sei(); // enable interupts
@@ -58,10 +65,47 @@ void setup() {
   TinyWireS.onReceive(receiveEvent);
   TinyWireS.onRequest(requestEvent);
   setBlinks(2);
-  wdt_enable(WDTO_8S); // enable 8 second WDT
 }
 
-void loop() { 
+void checkBattery() {
+  int a = analogRead(BATTERY_VOLTAGE_PIN);
+  if (425 <= a && a <= 645) {           // Check if battery is between 5.5V and 6.9V
+    setup_watchdog_interrpt();          // Use WDT for waking up device every 8 seconds.
+    digitalWrite(PI_POWER_PIN, LOW);    // Single long LED flash to indicate low battery
+    digitalWrite(POWER_LED, HIGH);
+    delay(1000);
+    digitalWrite(POWER_LED, LOW);
+    while (425 <= a && a <= 696) {      // Check if the battery is still flat.
+      wdt_interrupt_f = true;
+      set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+      sleep_enable();
+      sleep_mode();                     // Wait for WDT Interrupt
+      sleep_disable();
+      delay(100);
+      a = analogRead(BATTERY_VOLTAGE_PIN);
+    }
+  }
+  digitalWrite(PI_POWER_PIN, HIGH);
+  wdt_enable(WDTO_8S);
+}
+
+void setup_watchdog_interrpt() {
+  WDTCR |= (1 << WDCE) | (1 << WDE);
+  WDTCR = (1 << WDCE) | (1 << WDP3) | (1 << WDP0);
+  WDTCR |= (1 << WDIE);
+}
+
+ISR(WDT_vect) {
+  if (!wdt_interrupt_f) {
+    wdt_enable(WDTO_15MS);  // Restart if this flag is not set.
+    while(1) {};
+  }
+  wdt_interrupt_f = false;
+}
+
+
+void loop() {
+  checkBattery();
   switch(state) {
     case PI_POWERED:
       digitalWrite(PI_POWER_PIN, HIGH);
