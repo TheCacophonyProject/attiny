@@ -9,6 +9,7 @@
 // 2 Blinks: Finished setup.
 // 3 Blinks: Pi WDT failed.
 // 4 Blinks: Starting Pi sleep.
+// 5 Blinks: Set register to read from
 // 10 Blinks: Error with reading i2c message.
 
 #include <TinyWireS.h>
@@ -22,6 +23,7 @@
 #define PI_POWER_OFF_WAIT_TIME 3000 // 30 seconds. = 30/0.01 as each tick is 0.01 seconds.
 #define MINUTE_COUNTDOWN 108 // = (60/0.5)*90% as each interupt occurs every 0.5 seconds. -10% because of inaccurate internal clock
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
+#define BATTERY_VOLTAGE_PIN A2
 
 volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will be turned on in minutes. If this is 0 the pi will be powered on.
 volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
@@ -33,6 +35,15 @@ enum State {
   PI_POWER_OFF_WAIT,        // Wait 30 seconds before powering off the Pi
   PI_SLEEPING,              // RPi is sleeping, 
   PI_WDT_FAILED             // WDT for RPi failed. Turn off and on.
+};
+
+#define I2C_READ_REG_LEN 1
+#define I2C_READ_BATTERY_VOLTAGE 0x20
+
+volatile byte i2cReadRegVal = 0x00;
+volatile byte i2cReadRegs[I2C_READ_REG_LEN] =
+{
+    I2C_READ_BATTERY_VOLTAGE,
 };
 
 State state = PI_POWERED;
@@ -127,7 +138,17 @@ void timer_tick() {
 
 // Gets called when the ATtiny receives an i2c request
 void requestEvent() {
-  TinyWireS.send(0x03);
+  switch(i2cReadRegVal) {
+    case 0x00:
+      TinyWireS.send(0x03);
+      break;
+    case I2C_READ_BATTERY_VOLTAGE:
+      uint16_t batteryVoltage = analogRead(BATTERY_VOLTAGE_PIN);
+      TinyWireS.send(batteryVoltage & 0xff);
+      TinyWireS.send(batteryVoltage >> 8);
+      break;
+  }
+  i2cReadRegVal = 0x00;
 }
 
 void receiveEvent(uint8_t howMany) {
@@ -139,7 +160,8 @@ void receiveEvent(uint8_t howMany) {
   bool successfulRead = false;
   byte l;
   byte h;
-  switch (TinyWireS.receive()) {
+  byte val = TinyWireS.receive();
+  switch (val) {
     case 0x11:
       if (howMany != 3) {
           break;
@@ -159,6 +181,13 @@ void receiveEvent(uint8_t howMany) {
       setBlinks(1);
       piWDTCountdown = PI_WDT_RESET_VAL;
       successfulRead = true;
+      break;
+     default:
+      if (isI2cReadReg(val)) {
+        successfulRead = true;
+        i2cReadRegVal = val;
+        setBlinks(5);
+      }
       break;
   }
 
@@ -273,6 +302,15 @@ ISR(TIMER1_COMPA_vect) {
   } else {
     minuteCountdown--;
   }
+}
+
+bool isI2cReadReg(byte val) {
+  for (int i = 0; i < I2C_READ_REG_LEN; i++) {
+    if (i2cReadRegs[i] == val) {
+      return true;
+    }
+  }
+  return false;
 }
 
 
