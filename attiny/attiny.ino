@@ -25,6 +25,10 @@
 #define MINUTE_COUNTDOWN 108 // = (60/0.5)*90% as each interupt occurs every 0.5 seconds. -10% because of inaccurate internal clock
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
 #define BATTERY_VOLTAGE_PIN A2
+#define BATTERY_5V5 425
+#define BATTERY_6V9 645
+#define BATTERY_7V2 696
+
 
 volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will be turned on in minutes. If this is 0 the pi will be powered on.
 volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
@@ -69,13 +73,13 @@ void setup() {
 
 void checkBattery() {
   int a = analogRead(BATTERY_VOLTAGE_PIN);
-  if (425 <= a && a <= 645) {           // Check if battery is between 5.5V and 6.9V
+  if (BATTERY_5V5 <= a && a <= BATTERY_6V9) {           // Check if battery is between 5.5V and 6.9V. If the voltage is bellow 5.5V the device will be powered from a 5V wall adapter.
     setup_watchdog_interrpt();          // Use WDT for waking up device every 8 seconds.
     digitalWrite(PI_POWER_PIN, LOW);    // Single long LED flash to indicate low battery
     digitalWrite(POWER_LED, HIGH);
     delay(1000);
     digitalWrite(POWER_LED, LOW);
-    while (425 <= a && a <= 696) {      // Check if the battery is still flat.
+    while (BATTERY_5V5 <= a && a <= BATTERY_7V2) {      // Wait for the battery to reach 7.2V before turning on.
       wdt_interrupt_f = true;
       set_sleep_mode(SLEEP_MODE_PWR_DOWN);
       sleep_enable();
@@ -90,9 +94,10 @@ void checkBattery() {
 }
 
 void setup_watchdog_interrpt() {
-  WDTCR |= (1 << WDCE) | (1 << WDE);
-  WDTCR = (1 << WDCE) | (1 << WDP3) | (1 << WDP0);
-  WDTCR |= (1 << WDIE);
+  // For more detail see section 8.4 of the ATtiny 85 datasheet http://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-2586-AVR-8-bit-Microcontroller-ATtiny25-ATtiny45-ATtiny85_Datasheet.pdf
+  WDTCR |= (1 << WDCE) | (1 << WDE);  // These bits have to be set before disabling the WDT (have to disable the WDT restart to enable the WDT interrupt)
+  WDTCR = (1 << WDCE) | (1 << WDP3) | (1 << WDP0);  // Disable the WDT and set the interval to 8 seconds
+  WDTCR |= (1 << WDIE); // This will enable the WDT interrupt (not WDT restart).
 }
 
 ISR(WDT_vect) {
