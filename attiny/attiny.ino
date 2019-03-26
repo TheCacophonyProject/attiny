@@ -9,12 +9,14 @@
 // 2 Blinks: Finished setup.
 // 3 Blinks: Pi WDT failed.
 // 4 Blinks: Starting Pi sleep.
+// 5 Blinks: Set register to read from
 // 10 Blinks: Error with reading i2c message.
 
 #include <TinyWireS.h>
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <avr/wdt.h>
+#include <avr/sleep.h>
 
 #define I2C_SLAVE_ADDRESS 0x04 // Address of the slave
 #define POWER_LED 1
@@ -22,10 +24,17 @@
 #define PI_POWER_OFF_WAIT_TIME 3000 // 30 seconds. = 30/0.01 as each tick is 0.01 seconds.
 #define MINUTE_COUNTDOWN 108 // = (60/0.5)*90% as each interupt occurs every 0.5 seconds. -10% because of inaccurate internal clock
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
+#define BATTERY_VOLTAGE_PIN A2
+#define BATTERY_5V5 425
+#define BATTERY_6V9 645
+#define BATTERY_7V2 696
+
 
 volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will be turned on in minutes. If this is 0 the pi will be powered on.
 volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
 unsigned int piWDTCountdown = PI_WDT_RESET_VAL;
+volatile bool wdt_interrupt_f = false;
+
 
 volatile uint8_t blinks = 0;
 enum State {
@@ -35,11 +44,24 @@ enum State {
   PI_WDT_FAILED             // WDT for RPi failed. Turn off and on.
 };
 
+#define I2C_READ_REG_LEN 1
+#define I2C_READ_BATTERY_VOLTAGE 0x20
+
+volatile byte i2cReadRegVal = 0x00;
+volatile byte i2cReadRegs[I2C_READ_REG_LEN] =
+{
+    I2C_READ_BATTERY_VOLTAGE,
+};
+
 State state = PI_POWERED;
 
 void setup() {
+  pinMode(BATTERY_VOLTAGE_PIN, INPUT);
   pinMode(PI_POWER_PIN, OUTPUT);
   pinMode(POWER_LED, OUTPUT);
+  digitalWrite(PI_POWER_PIN, LOW);
+  digitalWrite(POWER_LED, LOW);
+  checkBattery();
   digitalWrite(POWER_LED, LOW);
   initTimer1();
   sei(); // enable interupts
@@ -47,10 +69,48 @@ void setup() {
   TinyWireS.onReceive(receiveEvent);
   TinyWireS.onRequest(requestEvent);
   setBlinks(2);
-  wdt_enable(WDTO_8S); // enable 8 second WDT
 }
 
-void loop() { 
+void checkBattery() {
+  int a = analogRead(BATTERY_VOLTAGE_PIN);
+  if (BATTERY_5V5 <= a && a <= BATTERY_6V9) {           // Check if battery is between 5.5V and 6.9V. If the voltage is bellow 5.5V the device will be powered from a 5V wall adapter.
+    setup_watchdog_interrpt();          // Use WDT for waking up device every 8 seconds.
+    digitalWrite(PI_POWER_PIN, LOW);    // Single long LED flash to indicate low battery
+    digitalWrite(POWER_LED, HIGH);
+    delay(1000);
+    digitalWrite(POWER_LED, LOW);
+    while (BATTERY_5V5 <= a && a <= BATTERY_7V2) {      // Wait for the battery to reach 7.2V before turning on.
+      wdt_interrupt_f = true;
+      set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+      sleep_enable();
+      sleep_mode();                     // Wait for WDT Interrupt
+      sleep_disable();
+      delay(100);
+      a = analogRead(BATTERY_VOLTAGE_PIN);
+    }
+  }
+  digitalWrite(PI_POWER_PIN, HIGH);
+  wdt_enable(WDTO_8S);
+}
+
+void setup_watchdog_interrpt() {
+  // For more detail see section 8.4 of the ATtiny 85 datasheet http://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-2586-AVR-8-bit-Microcontroller-ATtiny25-ATtiny45-ATtiny85_Datasheet.pdf
+  WDTCR |= (1 << WDCE) | (1 << WDE);  // These bits have to be set before disabling the WDT (have to disable the WDT restart to enable the WDT interrupt)
+  WDTCR = (1 << WDCE) | (1 << WDP3) | (1 << WDP0);  // Disable the WDT and set the interval to 8 seconds
+  WDTCR |= (1 << WDIE); // This will enable the WDT interrupt (not WDT restart).
+}
+
+ISR(WDT_vect) {
+  if (!wdt_interrupt_f) {
+    wdt_enable(WDTO_15MS);  // Restart if this flag is not set.
+    while(1) {};
+  }
+  wdt_interrupt_f = false;
+}
+
+
+void loop() {
+  checkBattery();
   switch(state) {
     case PI_POWERED:
       digitalWrite(PI_POWER_PIN, HIGH);
@@ -127,7 +187,17 @@ void timer_tick() {
 
 // Gets called when the ATtiny receives an i2c request
 void requestEvent() {
-  TinyWireS.send(0x03);
+  switch(i2cReadRegVal) {
+    case 0x00:
+      TinyWireS.send(0x03);
+      break;
+    case I2C_READ_BATTERY_VOLTAGE:
+      uint16_t batteryVoltage = analogRead(BATTERY_VOLTAGE_PIN);
+      TinyWireS.send(batteryVoltage & 0xff);
+      TinyWireS.send(batteryVoltage >> 8);
+      break;
+  }
+  i2cReadRegVal = 0x00;
 }
 
 void receiveEvent(uint8_t howMany) {
@@ -139,7 +209,8 @@ void receiveEvent(uint8_t howMany) {
   bool successfulRead = false;
   byte l;
   byte h;
-  switch (TinyWireS.receive()) {
+  byte val = TinyWireS.receive();
+  switch (val) {
     case 0x11:
       if (howMany != 3) {
           break;
@@ -159,6 +230,13 @@ void receiveEvent(uint8_t howMany) {
       setBlinks(1);
       piWDTCountdown = PI_WDT_RESET_VAL;
       successfulRead = true;
+      break;
+     default:
+      if (isI2cReadReg(val)) {
+        successfulRead = true;
+        i2cReadRegVal = val;
+        setBlinks(5);
+      }
       break;
   }
 
@@ -273,6 +351,15 @@ ISR(TIMER1_COMPA_vect) {
   } else {
     minuteCountdown--;
   }
+}
+
+bool isI2cReadReg(byte val) {
+  for (int i = 0; i < I2C_READ_REG_LEN; i++) {
+    if (i2cReadRegs[i] == val) {
+      return true;
+    }
+  }
+  return false;
 }
 
 
