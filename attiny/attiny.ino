@@ -26,7 +26,7 @@
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
 #define BATTERY_VOLTAGE_PIN A2
 
-#if false  // true if attiny is on 5V, fales if on 3.3V
+#if false  // true if attiny is on 5V, false if on 3.3V
 #define BATTERY_5V5 425
 #define BATTERY_6V9 645
 #define BATTERY_7V2 696
