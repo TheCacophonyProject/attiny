@@ -25,10 +25,16 @@
 #define MINUTE_COUNTDOWN 108 // = (60/0.5)*90% as each interupt occurs every 0.5 seconds. -10% because of inaccurate internal clock
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
 #define BATTERY_VOLTAGE_PIN A2
+
+#if false  // true if attiny is on 5V, false if on 3.3V
 #define BATTERY_5V5 425
 #define BATTERY_6V9 645
 #define BATTERY_7V2 696
-
+#else // 3.3V values
+#define BATTERY_5V5 10
+#define BATTERY_6V9 369
+#define BATTERY_7V2 455
+#endif
 
 volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will be turned on in minutes. If this is 0 the pi will be powered on.
 volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
