@@ -41,6 +41,7 @@ volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
 unsigned int piWDTCountdown = PI_WDT_RESET_VAL;
 volatile bool wdt_interrupt_f = false;
 
+uint16_t batteryVoltageI2c;  // Battery voltage reading for I2c
 
 volatile uint8_t blinks = 0;
 enum State {
@@ -50,13 +51,15 @@ enum State {
   PI_WDT_FAILED             // WDT for RPi failed. Turn off and on.
 };
 
-#define I2C_READ_REG_LEN 1
-#define I2C_READ_BATTERY_VOLTAGE 0x20
+#define I2C_READ_REG_LEN 2
+#define I2C_READ_BATTERY_VOLTAGE_1 0x20
+#define I2C_READ_BATTERY_VOLTAGE_2 0x21
 
 volatile byte i2cReadRegVal = 0x00;
 volatile byte i2cReadRegs[I2C_READ_REG_LEN] =
 {
-    I2C_READ_BATTERY_VOLTAGE,
+    I2C_READ_BATTERY_VOLTAGE_1,
+    I2C_READ_BATTERY_VOLTAGE_2
 };
 
 State state = PI_POWERED;
@@ -197,10 +200,12 @@ void requestEvent() {
     case 0x00:
       TinyWireS.send(0x03);
       break;
-    case I2C_READ_BATTERY_VOLTAGE:
-      uint16_t batteryVoltage = analogRead(BATTERY_VOLTAGE_PIN);
-      TinyWireS.send(batteryVoltage & 0xff);
-      TinyWireS.send(batteryVoltage >> 8);
+    case I2C_READ_BATTERY_VOLTAGE_1:
+      batteryVoltageI2c = analogRead(BATTERY_VOLTAGE_PIN);
+      TinyWireS.send(batteryVoltageI2c & 0xff);
+      break;
+    case I2C_READ_BATTERY_VOLTAGE_2:
+      TinyWireS.send(batteryVoltageI2c >> 8);
       break;
   }
   i2cReadRegVal = 0x00;
