@@ -52,14 +52,14 @@ enum State {
 };
 
 #define I2C_READ_REG_LEN 2
-#define I2C_READ_BATTERY_VOLTAGE_1 0x20
-#define I2C_READ_BATTERY_VOLTAGE_2 0x21
+#define I2C_READ_BATTERY_VOLTAGE_LO 0x20
+#define I2C_READ_BATTERY_VOLTAGE_HI 0x21
 
 volatile byte i2cReadRegVal = 0x00;
 volatile byte i2cReadRegs[I2C_READ_REG_LEN] =
 {
-    I2C_READ_BATTERY_VOLTAGE_1,
-    I2C_READ_BATTERY_VOLTAGE_2
+    I2C_READ_BATTERY_VOLTAGE_LO,
+    I2C_READ_BATTERY_VOLTAGE_HI
 };
 
 State state = PI_POWERED;
@@ -200,11 +200,11 @@ void requestEvent() {
     case 0x00:
       TinyWireS.send(0x03);
       break;
-    case I2C_READ_BATTERY_VOLTAGE_1:
+    case I2C_READ_BATTERY_VOLTAGE_LO:
       batteryVoltageI2c = analogRead(BATTERY_VOLTAGE_PIN);
       TinyWireS.send(batteryVoltageI2c & 0xff);
       break;
-    case I2C_READ_BATTERY_VOLTAGE_2:
+    case I2C_READ_BATTERY_VOLTAGE_HI:
       TinyWireS.send(batteryVoltageI2c >> 8);
       break;
   }
