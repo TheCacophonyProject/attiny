@@ -18,6 +18,8 @@
 #include <avr/wdt.h>
 #include <avr/sleep.h>
 
+#define VERSION 4
+
 #define I2C_SLAVE_ADDRESS 0x04 // Address of the slave
 #define POWER_LED 1
 #define PI_POWER_PIN 3
@@ -51,15 +53,17 @@ enum State {
   PI_WDT_FAILED             // WDT for RPi failed. Turn off and on.
 };
 
-#define I2C_READ_REG_LEN 2
+#define I2C_READ_REG_LEN 3
 #define I2C_READ_BATTERY_VOLTAGE_LO 0x20
 #define I2C_READ_BATTERY_VOLTAGE_HI 0x21
+#define I2C_READ_VERSION 0x22
 
 volatile byte i2cReadRegVal = 0x00;
 volatile byte i2cReadRegs[I2C_READ_REG_LEN] =
 {
     I2C_READ_BATTERY_VOLTAGE_LO,
-    I2C_READ_BATTERY_VOLTAGE_HI
+    I2C_READ_BATTERY_VOLTAGE_HI,
+    I2C_READ_VERSION
 };
 
 State state = PI_POWERED;
@@ -206,6 +210,9 @@ void requestEvent() {
       break;
     case I2C_READ_BATTERY_VOLTAGE_HI:
       TinyWireS.send(batteryVoltageI2c >> 8);
+      break;
+    case I2C_READ_VERSION:
+      TinyWireS.send(VERSION);
       break;
   }
   i2cReadRegVal = 0x00;
