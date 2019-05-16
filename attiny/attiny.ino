@@ -18,6 +18,8 @@
 #include <avr/wdt.h>
 #include <avr/sleep.h>
 
+#define VERSION 4
+
 #define I2C_SLAVE_ADDRESS 0x04 // Address of the slave
 #define POWER_LED 1
 #define PI_POWER_PIN 3
@@ -40,6 +42,8 @@ volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will b
 volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
 unsigned int piWDTCountdown = PI_WDT_RESET_VAL;
 volatile bool wdt_interrupt_f = false;
+volatile bool onWiFi = false;
+volatile bool gotWDPing = false;
 
 uint16_t batteryVoltageI2c;  // Battery voltage reading for I2c
 
@@ -50,19 +54,24 @@ enum State {
   PI_SLEEPING,              // RPi is sleeping, 
   PI_WDT_FAILED             // WDT for RPi failed. Turn off and on.
 };
+State state = PI_POWERED;
 
-#define I2C_READ_REG_LEN 2
+#define I2C_READ_REG_LEN 3
 #define I2C_READ_BATTERY_VOLTAGE_LO 0x20
 #define I2C_READ_BATTERY_VOLTAGE_HI 0x21
+#define I2C_READ_VERSION 0x22
+
+
 
 volatile byte i2cReadRegVal = 0x00;
 volatile byte i2cReadRegs[I2C_READ_REG_LEN] =
 {
     I2C_READ_BATTERY_VOLTAGE_LO,
-    I2C_READ_BATTERY_VOLTAGE_HI
+    I2C_READ_BATTERY_VOLTAGE_HI,
+    I2C_READ_VERSION
 };
 
-State state = PI_POWERED;
+
 
 void setup() {
   pinMode(BATTERY_VOLTAGE_PIN, INPUT);
@@ -207,6 +216,9 @@ void requestEvent() {
     case I2C_READ_BATTERY_VOLTAGE_HI:
       TinyWireS.send(batteryVoltageI2c >> 8);
       break;
+    case I2C_READ_VERSION:
+      TinyWireS.send(VERSION);
+      break;
   }
   i2cReadRegVal = 0x00;
 }
@@ -238,8 +250,16 @@ void receiveEvent(uint8_t howMany) {
       if (howMany != 1) {
         break;
       }
+      gotWDPing = true;
       setBlinks(1);
       piWDTCountdown = PI_WDT_RESET_VAL;
+      successfulRead = true;
+      break;
+    case 0x13:
+      if (howMany != 2) {
+        break;
+      }
+      onWiFi = TinyWireS.receive() == 0x01;
       successfulRead = true;
       break;
      default:
@@ -298,6 +318,12 @@ void update_power_led() {
       powerLedIntensity--;
       analogWrite(POWER_LED, powerLedIntensity);
       if (powerLedIntensity <= 1) {
+        if (!gotWDPing) {
+          blinks = 2;
+        }
+        else if (!onWiFi) {
+          blinks = 1;
+        }
         if (blinks >= 1) {
           powerLedState = 2; // Starting the blink here makes it easier to count the blinks
           blinkTimer = 0;
