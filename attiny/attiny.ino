@@ -42,8 +42,8 @@ volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will b
 volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
 unsigned int piWDTCountdown = PI_WDT_RESET_VAL;
 volatile bool wdt_interrupt_f = false;
-volatile byte onWiFi = 0x00;
-volatile bool gotWDT = false;
+volatile bool onWiFi = false;
+volatile bool gotWDPing = false;
 
 uint16_t batteryVoltageI2c;  // Battery voltage reading for I2c
 
@@ -250,7 +250,7 @@ void receiveEvent(uint8_t howMany) {
       if (howMany != 1) {
         break;
       }
-      gotWDT = true;
+      gotWDPing = true;
       setBlinks(1);
       piWDTCountdown = PI_WDT_RESET_VAL;
       successfulRead = true;
@@ -259,7 +259,7 @@ void receiveEvent(uint8_t howMany) {
       if (howMany != 2) {
         break;
       }
-      onWiFi = TinyWireS.receive();
+      onWiFi = TinyWireS.receive() == 0x01;
       successfulRead = true;
       break;
      default:
@@ -318,10 +318,10 @@ void update_power_led() {
       powerLedIntensity--;
       analogWrite(POWER_LED, powerLedIntensity);
       if (powerLedIntensity <= 1) {
-        if (!gotWDT) {
+        if (!gotWDPing) {
           blinks = 2;
         }
-        else if (onWiFi != 0x01) {
+        else if (!onWiFi) {
           blinks = 1;
         }
         if (blinks >= 1) {
