@@ -28,15 +28,25 @@
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
 #define BATTERY_VOLTAGE_PIN A2
 
-#if false  // true if attiny is on 5V, false if on 3.3V
-#define BATTERY_5V5 425
-#define BATTERY_6V9 645
-#define BATTERY_7V2 696
-#else // 3.3V values
-#define BATTERY_5V5 10
-#define BATTERY_6V9 369
-#define BATTERY_7V2 455
-#endif
+
+// 3.3V LiFePO4
+#define VOLTAGE_POWER_SUPPLY 32
+#define VOLTAGE_EMPTY_BATTERY 63
+#define VOLTAGE_LOW_BATTERY 141
+
+// 3.3V Li-ion
+/*
+#define VOLTAGE_POWER_SUPPLY 32
+#define VOLTAGE_EMPTY_BATTERY 369
+#define VOLTAGE_LOW_BATTERY 455
+*/
+
+// 5V LiFePO4
+/*
+#define VOLTAGE_POWER_SUPPLY 434
+#define VOLTAGE_EMPTY_BATTERY 470
+#define VOLTAGE_LOW_BATTERY 522
+*/
 
 volatile uint16_t piSleepTime = 0; // Counting down the time until the pi will be turned on in minutes. If this is 0 the pi will be powered on.
 volatile uint8_t minuteCountdown = MINUTE_COUNTDOWN;
@@ -91,13 +101,13 @@ void setup() {
 
 void checkBattery() {
   int a = analogRead(BATTERY_VOLTAGE_PIN);
-  if (BATTERY_5V5 <= a && a <= BATTERY_6V9) {           // Check if battery is between 5.5V and 6.9V. If the voltage is bellow 5.5V the device will be powered from a 5V wall adapter.
+  if (VOLTAGE_POWER_SUPPLY <= a && a <= VOLTAGE_EMPTY_BATTERY) {           // Check if battery is between 5.5V and 6.9V. If the voltage is bellow 5.5V the device will be powered from a 5V wall adapter.
     setup_watchdog_interrpt();          // Use WDT for waking up device every 8 seconds.
     digitalWrite(PI_POWER_PIN, LOW);    // Single long LED flash to indicate low battery
     digitalWrite(POWER_LED, HIGH);
     delay(1000);
     digitalWrite(POWER_LED, LOW);
-    while (BATTERY_5V5 <= a && a <= BATTERY_7V2) {      // Wait for the battery to reach 7.2V before turning on.
+    while (VOLTAGE_POWER_SUPPLY <= a && a <= VOLTAGE_LOW_BATTERY) {      // Wait for the battery to reach 7.2V before turning on.
       wdt_interrupt_f = true;
       set_sleep_mode(SLEEP_MODE_PWR_DOWN);
       sleep_enable();
