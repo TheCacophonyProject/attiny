@@ -29,6 +29,10 @@
 #define BATTERY_VOLTAGE_PIN A2
 
 
+// VOLTAGE_POWER_SUPPLY is the maximum voltage reading when powered from a power supply
+// VOLTAGE_EMPTY_BATTERY is the voltage of an empty battery
+// VOLTAGE_LOW_BATTERY is the voltage needed to reach to turn back on after reaching VOLTAGE_EMPTY_BATTERY
+
 // 3.3V LiFePO4
 #define VOLTAGE_POWER_SUPPLY 32
 #define VOLTAGE_EMPTY_BATTERY 63
@@ -101,13 +105,13 @@ void setup() {
 
 void checkBattery() {
   int a = analogRead(BATTERY_VOLTAGE_PIN);
-  if (VOLTAGE_POWER_SUPPLY <= a && a <= VOLTAGE_EMPTY_BATTERY) {           // Check if battery is between 5.5V and 6.9V. If the voltage is bellow 5.5V the device will be powered from a 5V wall adapter.
+  if (VOLTAGE_POWER_SUPPLY <= a && a <= VOLTAGE_EMPTY_BATTERY) {           // If voltage reading is lower than EMPTY_BATTERY and higher than POWER_SUPPLY then the battery is likely empty.
     setup_watchdog_interrpt();          // Use WDT for waking up device every 8 seconds.
     digitalWrite(PI_POWER_PIN, LOW);    // Single long LED flash to indicate low battery
     digitalWrite(POWER_LED, HIGH);
     delay(1000);
     digitalWrite(POWER_LED, LOW);
-    while (VOLTAGE_POWER_SUPPLY <= a && a <= VOLTAGE_LOW_BATTERY) {      // Wait for the battery to reach 7.2V before turning on.
+    while (VOLTAGE_POWER_SUPPLY <= a && a <= VOLTAGE_LOW_BATTERY) {      // Wait for the battery voltage to rise a to LOW_BATTERY before turning back on.
       wdt_interrupt_f = true;
       set_sleep_mode(SLEEP_MODE_PWR_DOWN);
       sleep_enable();
