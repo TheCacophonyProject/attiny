@@ -17,6 +17,7 @@
 #include <avr/io.h>
 #include <avr/wdt.h>
 #include <avr/sleep.h>
+#include <RunningAverage.h>
 
 #define VERSION 4
 
@@ -59,6 +60,8 @@ volatile bool wdt_interrupt_f = false;
 volatile bool onWiFi = false;
 volatile bool gotWDPing = false;
 
+
+RunningAverage batteryRA(20);
 uint16_t batteryVoltageI2c;  // Battery voltage reading for I2c
 
 volatile uint8_t blinks = 0;
@@ -104,7 +107,8 @@ void setup() {
 }
 
 void checkBattery() {
-  int a = analogRead(BATTERY_VOLTAGE_PIN);
+  batteryRA.addValue(analogRead(BATTERY_VOLTAGE_PIN));
+  int a = batteryRA.getAverage();
   if (VOLTAGE_POWER_SUPPLY <= a && a <= VOLTAGE_EMPTY_BATTERY) {           // If voltage reading is lower than EMPTY_BATTERY and higher than POWER_SUPPLY then the battery is likely empty.
     setup_watchdog_interrpt();          // Use WDT for waking up device every 8 seconds.
     digitalWrite(PI_POWER_PIN, LOW);    // Single long LED flash to indicate low battery
@@ -171,7 +175,6 @@ void loop() {
       }
       break;
   }
-  
   if (piWDTCountdown <= 0) {
     state = PI_WDT_FAILED;
   }
@@ -224,7 +227,7 @@ void requestEvent() {
       TinyWireS.send(0x03);
       break;
     case I2C_READ_BATTERY_VOLTAGE_LO:
-      batteryVoltageI2c = analogRead(BATTERY_VOLTAGE_PIN);
+      batteryVoltageI2c = batteryRA.getAverage();
       TinyWireS.send(batteryVoltageI2c & 0xff);
       break;
     case I2C_READ_BATTERY_VOLTAGE_HI:
@@ -412,5 +415,3 @@ bool isI2cReadReg(byte val) {
   }
   return false;
 }
-
-
