@@ -12,12 +12,12 @@
 // 5 Blinks: Set register to read from
 // 10 Blinks: Error with reading i2c message.
 
-#include <TinyWireS.h>
+#include "TinyWireS.h" //https://github.com/rambo/TinyWire
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <avr/wdt.h>
 #include <avr/sleep.h>
-#include <RunningAverage.h>
+#include "RunningAverage.h" //https://github.com/RobTillaart/Arduino/tree/master/libraries/RunningAverage
 
 #define VERSION 4
 
