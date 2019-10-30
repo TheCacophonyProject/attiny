@@ -28,7 +28,7 @@
 #define MINUTE_COUNTDOWN 108 // = (60/0.5)*90% as each interupt occurs every 0.5 seconds. -10% because of inaccurate internal clock
 #define PI_WDT_RESET_VAL 30000 // 5 minutes 100*60*5
 #define BATTERY_VOLTAGE_PIN A2
-
+#define POWER_LED_ON_DURATION 600000 // duration in milliseconds
 
 // VOLTAGE_POWER_SUPPLY is the maximum voltage reading when powered from a power supply
 // VOLTAGE_EMPTY_BATTERY is the voltage of an empty battery
@@ -315,13 +315,22 @@ void setBlinks(int i) {
   }
 }
 
-//========POWER PIN=========
+//========POWER LED PIN=========
 // Slowly turns the LED on and off
 int powerLedState = 1;  // Pulsing on or off
 int powerLedIntensity = 0;
 int blinkTimer = 0;
+bool ledEnabled = true;
 
 void update_power_led() {
+  if (!ledEnabled) {
+    return;
+  }
+  if (millis() > POWER_LED_ON_DURATION) {
+    digitalWrite(POWER_LED, LOW);
+    ledEnabled = false;
+    return;
+  }
   blinkTimer++;
   switch(powerLedState){
     case 0: // Pulsing on 
