@@ -19,7 +19,7 @@
 #include <avr/sleep.h>
 #include "RunningAverage.h" //https://github.com/RobTillaart/Arduino/tree/master/libraries/RunningAverage
 
-#define VERSION 4
+#define VERSION 5
 
 #define I2C_SLAVE_ADDRESS 0x04 // Address of the slave
 #define POWER_LED 1
@@ -60,7 +60,6 @@ volatile bool wdt_interrupt_f = false;
 volatile bool onWiFi = false;
 volatile bool gotWDPing = false;
 
-
 RunningAverage batteryRA(20);
 uint16_t batteryVoltageI2c;  // Battery voltage reading for I2c
 
@@ -96,6 +95,7 @@ void setup() {
   pinMode(POWER_LED, OUTPUT);
   digitalWrite(PI_POWER_PIN, LOW);
   digitalWrite(POWER_LED, LOW);
+  delay(2000);
   checkBattery();
   digitalWrite(POWER_LED, LOW);
   initTimer1();
@@ -107,6 +107,7 @@ void setup() {
 }
 
 void checkBattery() {
+  /*
   batteryRA.addValue(analogRead(BATTERY_VOLTAGE_PIN));
   int a = batteryRA.getAverage();
   if (VOLTAGE_POWER_SUPPLY <= a && a <= VOLTAGE_EMPTY_BATTERY) {           // If voltage reading is lower than EMPTY_BATTERY and higher than POWER_SUPPLY then the battery is likely empty.
@@ -127,6 +128,7 @@ void checkBattery() {
   }
   digitalWrite(PI_POWER_PIN, HIGH);
   wdt_enable(WDTO_8S);
+  */
 }
 
 void setup_watchdog_interrpt() {
